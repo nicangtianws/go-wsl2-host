@@ -1,8 +1,10 @@
+//go:build windows
 // +build windows
 
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +12,7 @@ import (
 	"syscall"
 
 	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
 )
@@ -82,30 +85,57 @@ func InstallService(name, desc string) error {
 	return nil
 }
 
-// RemoveService uninstalls the Windows service
+// RemoveService stops and uninstalls the Windows service
 func RemoveService(name string) error {
-	var err2 error
 	m, err := mgr.Connect()
 	if err != nil {
 		return err
 	}
 	defer m.Disconnect()
+
 	s, err := m.OpenService(name)
-	if err != nil {
-		err2 = fmt.Errorf("service %s is not installed", name)
-	} else {
-		defer s.Close()
-		err = s.Delete()
-		if err != nil {
-			err2 = fmt.Errorf("%w; %s", err2, err.Error())
+	switch {
+	case err == nil:
+		// The service must be stopped before it is deleted. Deleting a running
+		// service only marks it for deletion (ERROR_SERVICE_MARKED_FOR_DELETE);
+		// it stays running until it is stopped and only then is it removed.
+		serr := stopService(s)
+		if serr == nil {
+			serr = s.Delete()
+			if errors.Is(serr, windows.ERROR_SERVICE_MARKED_FOR_DELETE) {
+				// A previous remove already marked the service for deletion;
+				// waiting for it below is all that is left to do.
+				serr = nil
+			}
 		}
+		s.Close()
+		if serr != nil {
+			return fmt.Errorf("failed to delete service %s: %w", name, serr)
+		}
+	case errors.Is(err, windows.ERROR_SERVICE_MARKED_FOR_DELETE):
+		// Already marked for deletion by a previous remove; wait for it below.
+	case errors.Is(err, windows.ERROR_SERVICE_DOES_NOT_EXIST):
+		// Not installed; only a stale event log source may be left behind.
+	case errors.Is(err, windows.ERROR_ACCESS_DENIED):
+		return fmt.Errorf("could not open service %s: %w (run as administrator)", name, err)
+	default:
+		return fmt.Errorf("could not open service %s: %w", name, err)
 	}
-	err = eventlog.Remove(name)
-	if err != nil {
-		err2 = fmt.Errorf("%w; RemoveEventLogSource() failed: %s", err2, err)
+
+	// Windows removes a service marked for deletion asynchronously, once the
+	// service has stopped and every handle to it has been closed. Wait for that
+	// to finish so a subsequent install does not fail.
+	if err := waitForRemoval(m, name); err != nil {
+		return err
 	}
-	if err2 != nil {
-		return err2
+
+	// Removing the event log source is a best effort operation: the source may
+	// never have been created, or may already have been removed.
+	if err := eventlog.Remove(name); err != nil &&
+		!errors.Is(err, windows.ERROR_FILE_NOT_FOUND) &&
+		!errors.Is(err, windows.ERROR_PATH_NOT_FOUND) {
+		return fmt.Errorf("failed to remove event log source for %s: %w", name, err)
 	}
+
 	return nil
 }
