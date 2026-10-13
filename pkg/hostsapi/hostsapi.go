@@ -194,7 +194,7 @@ func (h *HostsAPI) Write() error {
 
 // GetHostIP returns the IP address of Hyper-V Switch on the host connected to WSL
 func GetHostIP() (string, error) {
-	cmd := exec.Command("netsh", "interface", "ip", "show", "address", "vEthernet (WSL)") //, "|", "findstr", "IP Address", "|", "%", "{", "$_", "-replace", "IP Address:", "", "}", "|", "%", "{", "$_", "-replace", " ", "", "}")
+	cmd := exec.Command("netsh", "interface", "ip", "show", "address")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -204,10 +204,45 @@ func GetHostIP() (string, error) {
 	// If need change reglar, make sure the other language is work OK.
 	// In chinese language os, the output is:
 	// "\r\n\xbdӿ\xda \"vEthernet (WSL)\" \xb5\xc4\xc5\xe4\xd6\xc3\r\n    DHCP \xd2\xd1\xc6\xf4\xd3\xc3:                          \xb7\xf1\r\n    IP \xb5\xd8ַ:                           172.18.144.1\r\n    \xd7\xd3\xcd\xf8ǰ\u05fa:                        172.18.144.0/20 (\xd1\xda\xc2\xeb 255.255.240.0)\r\n    InterfaceMetric:                      15\r\n\r\n"
-	ipRegex := regexp.MustCompile("IP.*:? \040*(.*)\r\n")
-	ipString := ipRegex.FindStringSubmatch(string(out))
-	if len(ipString) != 2 {
-		return "", errors.New(`netsh interface ip show address "vEthernet (WSL)"`)
+	ip := parseWSLInterfaceIP(string(out))
+	if ip == "" {
+		return "", errors.New(`failed to find WSL vEthernet adapter in "netsh interface ip show address" output`)
 	}
-	return ipString[1], nil
+	return ip, nil
+}
+
+// wslInterfaceRegex matches the header of the WSL vEthernet adapter block in
+// the output of `netsh interface ip show address`. Depending on the
+// Windows/WSL version the adapter is named either "vEthernet (WSL)" or, when
+// the Hyper-V firewall is in use, "vEthernet (WSL (Hyper-V firewall))".
+var wslInterfaceRegex = regexp.MustCompile(`(?i)vEthernet \(WSL`)
+
+// ipLineRegex matches the IPv4 address line inside a netsh interface block,
+// independently of the OS display language. The address token is preceded by
+// "IP Address:" on English systems and by "IP <addr>:" on e.g. Chinese
+// systems, so we match the leading "IP" token and capture the IPv4 address.
+var ipLineRegex = regexp.MustCompile(`^\s*IP\s+[^:]*:\s*(\d{1,3}(?:\.\d{1,3}){3})`)
+
+// parseWSLInterfaceIP finds the WSL vEthernet adapter in the output of
+// `netsh interface ip show address` and returns its IPv4 address, or "" if it
+// is not present.
+func parseWSLInterfaceIP(out string) string {
+	inWSLBlock := false
+	for _, line := range strings.Split(out, "\r\n") {
+		if wslInterfaceRegex.MatchString(line) {
+			inWSLBlock = true
+			continue
+		}
+		if strings.TrimSpace(line) == "" {
+			// a blank line terminates the current interface block
+			inWSLBlock = false
+			continue
+		}
+		if inWSLBlock {
+			if m := ipLineRegex.FindStringSubmatch(line); len(m) == 2 {
+				return m[1]
+			}
+		}
+	}
+	return ""
 }

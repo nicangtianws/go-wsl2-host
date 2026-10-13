@@ -179,10 +179,10 @@ func GetIP(name string) (string, error) {
 }
 
 // RunCommand runs the given command via `bash -c` under
-// the default WSL distro
-func RunCommand(command string, args ...string) (string, error) {
+// the given WSL distro
+func RunCommand(distro string, command string, args ...string) (string, error) {
 	cmdstr := fmt.Sprintf("%s %s", command, strings.Join(args, " "))
-	cmd := exec.Command("wsl.exe", "--", "bash", "-c", cmdstr)
+	cmd := exec.Command("wsl.exe", "-d", distro, "--", "bash", "-c", cmdstr)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err

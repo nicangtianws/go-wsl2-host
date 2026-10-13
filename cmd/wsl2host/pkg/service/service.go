@@ -100,51 +100,53 @@ func updateHostIP(elog debug.Log, distros []*wslapi.DistroInfo) error {
 	}
 
 	// process aliases
-	defdistro, _ := wslapi.GetDefaultDistro()
+	defdistro, err := wslapi.GetDefaultDistro()
 	if err != nil {
+		// Log and skip alias processing rather than dereferencing a nil
+		// defdistro below. Existing alias entries are left untouched.
 		elog.Error(1, fmt.Sprintf("GetDefaultDistro failed: %v", err))
-		return fmt.Errorf("GetDefaultDistro failed: %w", err)
-	}
-	var aliasmap = make(map[string]interface{})
-	defdistroip, _ := wslapi.GetIP(defdistro.Name)
-	if defdistro.Running {
-		aliases, err := wslapi.GetHostAliases()
-		if err == nil {
-			for _, a := range aliases {
-				aliasmap[a] = nil
-			}
-		}
-	}
-	// update entries after distro processing
-	hostentries = hapi.Entries()
-	for _, he := range hostentries {
-		if !wsl2hosts.IsAlias(he.Comment) {
-			continue
-		}
-		// update IP for aliases when running and if it exists in aliasmap
-		if _, ok := aliasmap[he.Hostname]; ok && defdistro.Running {
-			if he.IP != defdistroip {
-				updated = true
-				he.IP = defdistroip
-			}
-		} else { // remove entry when not running or not in aliasmap
-			err := hapi.RemoveEntry(he.Hostname)
+	} else {
+		var aliasmap = make(map[string]interface{})
+		defdistroip, _ := wslapi.GetIP(defdistro.Name)
+		if defdistro.Running {
+			aliases, err := wslapi.GetHostAliases()
 			if err == nil {
-				updated = true
+				for _, a := range aliases {
+					aliasmap[a] = nil
+				}
 			}
 		}
-	}
+		// update entries after distro processing
+		hostentries = hapi.Entries()
+		for _, he := range hostentries {
+			if !wsl2hosts.IsAlias(he.Comment) {
+				continue
+			}
+			// update IP for aliases when running and if it exists in aliasmap
+			if _, ok := aliasmap[he.Hostname]; ok && defdistro.Running {
+				if he.IP != defdistroip {
+					updated = true
+					he.IP = defdistroip
+				}
+			} else { // remove entry when not running or not in aliasmap
+				err := hapi.RemoveEntry(he.Hostname)
+				if err == nil {
+					updated = true
+				}
+			}
+		}
 
-	for hostname := range aliasmap {
-		// add new aliases
-		if _, ok := hostentries[hostname]; !ok && defdistro.Running {
-			err := hapi.AddEntry(&hostsapi.HostEntry{
-				IP:       defdistroip,
-				Hostname: hostname,
-				Comment:  wsl2hosts.DistroComment(defdistro.Name),
-			})
-			if err == nil {
-				updated = true
+		for hostname := range aliasmap {
+			// add new aliases
+			if _, ok := hostentries[hostname]; !ok && defdistro.Running {
+				err := hapi.AddEntry(&hostsapi.HostEntry{
+					IP:       defdistroip,
+					Hostname: hostname,
+					Comment:  wsl2hosts.DistroComment(defdistro.Name),
+				})
+				if err == nil {
+					updated = true
+				}
 			}
 		}
 	}

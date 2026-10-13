@@ -81,18 +81,26 @@ func Shutdown() error {
 	return wslcli.Shutdown()
 }
 
-// GetDefaultDistro returns the info for the default distro
+// GetDefaultDistro returns the info for the distro marked as default by WSL.
+//
+// If WSL reports no default distro (for example when a default has never been
+// set, so `wsl.exe -l -v` contains no `*` marker) the first distro is returned
+// as a fallback. This keeps the program working on machines with distros
+// installed but no default configured, instead of failing every cycle.
 func GetDefaultDistro() (*DistroInfo, error) {
 	infos, err := GetAllInfo()
 	if err != nil {
 		return nil, fmt.Errorf("GetAllInfo failed: %w", err)
 	}
+	if len(infos) == 0 {
+		return nil, errors.New("no WSL distros found")
+	}
 	for _, i := range infos {
-		if i.Default == true {
+		if i.Default {
 			return i, nil
 		}
 	}
-	return nil, errors.New("failed to find default")
+	return infos[0], nil
 }
 
 // IsRunning returns whether or not a given WSL distro is running
@@ -131,7 +139,7 @@ func GetHostAliases() ([]string, error) {
 	if !info.Running {
 		return nil, errors.New("default distro not running")
 	}
-	out, err := wslcli.RunCommand("cat", "~/.wsl2hosts")
+	out, err := wslcli.RunCommand(info.Name, "cat", "~/.wsl2hosts")
 	if err != nil {
 		return nil, fmt.Errorf("RunCommand failed: %w", err)
 	}
