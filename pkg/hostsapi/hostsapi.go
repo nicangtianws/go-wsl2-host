@@ -80,6 +80,9 @@ func (h *HostsAPI) loadAndParse() error {
 	idx := 0
 	for scanner.Scan() {
 		line := scanner.Text()
+		if err := scanner.Err(); err != nil {
+			return fmt.Errorf("failed to scan hosts file: %w", err)
+		}
 		entries, err := parseHostfileLine(idx, line)
 		idx++
 		if err != nil {
@@ -162,6 +165,9 @@ func (h *HostsAPI) Write() error {
 	scanner := bufio.NewScanner(h.hostsfile)
 	for idx := 0; scanner.Scan() == true; idx++ {
 		line := scanner.Text()
+		if err := scanner.Err(); err != nil {
+			return fmt.Errorf("failed to scan hosts file: %w", err)
+		}
 		if _, exists := h.remidxs[idx]; !exists {
 			outbuf.WriteString(line)
 			outbuf.WriteString("\r\n")

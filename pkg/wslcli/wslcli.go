@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
+
 	"math/bits"
 	"os/exec"
 	"strconv"
@@ -163,7 +164,7 @@ func GetIP(name string) (string, error) {
 	lines := strings.Split(sout, "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := lines[i]
-		if strings.Index(line, "32 host LOCAL") != -1 {
+		if strings.Contains(line, "32 host LOCAL") {
 			fs := strings.Fields(lines[i-1])
 			ipstr := strings.TrimSpace(fs[1])
 			ip, err := ipToUint32(ipstr)
@@ -195,7 +196,7 @@ func decodeOutput(raw []byte) (string, error) {
 	win16le := unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM)
 	utf16bom := unicode.BOMOverride(win16le.NewDecoder())
 	unicodeReader := transform.NewReader(bytes.NewReader(raw), utf16bom)
-	decoded, err := ioutil.ReadAll(unicodeReader)
+	decoded, err := io.ReadAll(unicodeReader)
 	if err != nil {
 		return "", err
 	}
@@ -220,7 +221,7 @@ func UpdateHostIP(distro string, host string, ip string) error {
 	}
 }
 
-/// Use the sed "a\" command to append new line.
+// / Use the sed "a\" command to append new line.
 func AddHostIP(distro string, host string, ip string) error {
 	cmd := exec.Command("wsl.exe", "-d", distro, "-u", "root", "--", "sed", "-i", fmt.Sprintf("$ a\\%s %s", ip, host), "/etc/hosts")
 	out, err := cmd.Output()
@@ -234,7 +235,7 @@ func AddHostIP(distro string, host string, ip string) error {
 	return nil
 }
 
-/// Use the sed "d" command to delete line
+// / Use the sed "d" command to delete line
 func DeleteHost(distro string, host string) error {
 	cmd := exec.Command("wsl.exe", "-d", distro, "--", "sed", "-i", fmt.Sprintf("/%s$/d", host), "/etc/hosts")
 	_, err := cmd.Output()
@@ -244,7 +245,7 @@ func DeleteHost(distro string, host string) error {
 	return nil
 }
 
-/// Find target hostname from hosts file
+// / Find target hostname from hosts file
 func GetHostIPFromHosts(distro string, host string) (string, error) {
 	cmd := exec.Command("wsl.exe", "-d", distro, "--", "cat", "/etc/hosts")
 	out, err := cmd.Output()
