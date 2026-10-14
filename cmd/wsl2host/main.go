@@ -26,7 +26,7 @@ func usage(errmsg string) {
 func main() {
 	const svcName = "wsl2host"
 
-	isIntSess, err := svc.IsAnInteractiveSession()
+	isIntSess, err := svc.IsWindowsService()
 	if err != nil {
 		log.Fatalf("failed to determine if we are running in an interactive session: %v", err)
 	}

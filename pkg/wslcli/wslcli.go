@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 
-	"math/bits"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -52,9 +51,10 @@ func Shutdown() error {
 	return nil
 }
 
-func netmaskToBits(mask uint32) int {
-	return bits.OnesCount32(mask)
-}
+//	func netmaskToBits(mask uint32) int {
+//		return bits.OnesCount32(mask)
+//	}
+
 func hexToUint32LE(hex string) (uint32, error) {
 	i, err := strconv.ParseInt(hex[6:8]+hex[4:6]+hex[2:4]+hex[0:2], 16, 64)
 	if err != nil {

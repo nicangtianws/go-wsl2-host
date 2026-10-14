@@ -234,7 +234,7 @@ var ipLineRegex = regexp.MustCompile(`^\s*IP\s+[^:]*:\s*(\d{1,3}(?:\.\d{1,3}){3}
 // is not present.
 func parseWSLInterfaceIP(out string) string {
 	inWSLBlock := false
-	for _, line := range strings.Split(out, "\r\n") {
+	for line := range strings.SplitSeq(out, "\r\n") {
 		if wslInterfaceRegex.MatchString(line) {
 			inWSLBlock = true
 			continue

@@ -11,10 +11,10 @@ import (
 	"strings"
 	"syscall"
 
-	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
+	"golang.org/x/term"
 )
 
 func exePath() (string, error) {
@@ -66,7 +66,7 @@ func InstallService(name, desc string) error {
 		username = fmt.Sprintf(".\\%s", strings.TrimSpace(username))
 	}
 	fmt.Printf("Windows Password: ")
-	bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
+	bytePassword, err := term.ReadPassword(int(syscall.Stdin))
 	if err != nil {
 		return err
 	}
